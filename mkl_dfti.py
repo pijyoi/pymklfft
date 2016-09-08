@@ -1,3 +1,5 @@
+from __future__ import print_function, division, absolute_import
+
 import os
 import sys
 import numpy as np
@@ -64,6 +66,8 @@ def install(dll_path=None):
         locations.append(dll_path)
     else:
         # try some known locations
+        # Anaconda Linux
+        locations.append(os.path.join(sys.exec_prefix, "lib"))
         # WinPython
         locations.append(os.path.join(os.path.dirname(np.__file__), "core"))
         # MKL installed into our home directory
@@ -72,13 +76,13 @@ def install(dll_path=None):
     for dll_path in locations:
         dll_pathname = os.path.join(dll_path, dll_name)
         if os.path.exists(dll_pathname):
-            lib = ffi.dlopen(dll_pathname)
-            break
+            try:
+                lib = ffi.dlopen(dll_pathname)
+                break
+            except OSError as e:
+                print(e)
     else:
-        try:
-            lib = ffi.dlopen(dll_name)
-        except OSError as e:
-            print(e)
+        print("failed to load MKL libraries")
 
 install()
 
