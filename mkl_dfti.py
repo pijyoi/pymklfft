@@ -159,16 +159,16 @@ class DftiDescriptor:
         raise_if_error(rc)
 
     def computeForward(self, src, dst=None):
-        args = [ffi.from_buffer(src)]
+        args = [ffi.cast("void*", src.ctypes.data)]
         if dst is not None:
-            args.append(ffi.from_buffer(dst))
+            args.append(ffi.cast("void*", dst.ctypes.data))
         rc = lib.DftiComputeForward(self.handle[0], *args)
         raise_if_error(rc)
 
     def computeBackward(self, src, dst=None):
-        args = [ffi.from_buffer(src)]
+        args = [ffi.cast("void*", src.ctypes.data)]
         if dst is not None:
-            args.append(ffi.from_buffer(dst))
+            args.append(ffi.cast("void*", dst.ctypes.data))
         rc = lib.DftiComputeBackward(self.handle[0], *args)
         raise_if_error(rc)
 
@@ -377,9 +377,8 @@ def test():
         mat[row] = np.sin(2*np.pi*freq*ttt)
 
     # test "column" fft
-    mat = mat.T.copy()
-    y = fft(mat, axis=0)
-    y = y.T.copy()
+    y = rfft(mat.T, axis=0)
+    y = y.T
 
     for row in range(y.shape[0]):
         plt.plot(np.abs(y[row]))
