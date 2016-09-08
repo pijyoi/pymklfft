@@ -195,10 +195,10 @@ def r2c_dst_dtype(src_dtype):
 def c2r_dst_dtype(src_dtype):
     return np.dtype(src_dtype.char.lower())
 
-def get_realaxis(maxaxes, loopaxis):
+def get_realaxis(ndim, loopaxis):
     # real axis is the last axis after excluding the loopaxis.
     # NOTE: choice of last axis follows C row major convention
-    allaxes = list(range(maxaxes))
+    allaxes = list(range(ndim))
     if loopaxis is not None:
         allaxes.pop(loopaxis)
     realaxis = allaxes[-1]
@@ -207,7 +207,7 @@ def get_realaxis(maxaxes, loopaxis):
 def rfftnd_helper(array_in, dirn, loopaxis=None):
     iarray = array_in
     ishape = iarray.shape
-    realaxis = get_realaxis(len(ishape), loopaxis)
+    realaxis = get_realaxis(iarray.ndim, loopaxis)
 
     if np.isrealobj(iarray):
         assert dirn==FORWARD
@@ -306,11 +306,11 @@ def fftnd_helper(array_in, dirn, loopaxis=None):
 
     return oarray
 
-def axes_to_loopaxis(maxaxes, axes):
+def axes_to_loopaxis(ndim, axes):
     if axes is None:
         return None
-    axes = [(x+maxaxes)%maxaxes for x in axes]  # fix negative axes
-    work = set(range(maxaxes))
+    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
+    work = set(range(ndim))
     work.difference_update(axes)
     if len(work)==0:
         return None
@@ -320,51 +320,51 @@ def axes_to_loopaxis(maxaxes, axes):
         raise ValueError("unsupported axes")
 
 def rfft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(len(x.shape), (axis,))
+    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
     return rfftnd_helper(x, FORWARD, loopaxis=loopaxis)
 
 def irfft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(len(x.shape), (axis,))
+    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
     return rfftnd_helper(x, BACKWARD, loopaxis=loopaxis)
 
 def rfft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return rfftnd_helper(x, FORWARD, loopaxis=loopaxis)
 
 def irfft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return rfftnd_helper(x, BACKWARD, loopaxis=loopaxis)
 
 def rfftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return rfftnd_helper(x, FORWARD, loopaxis=loopaxis)
 
 def irfftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return rfftnd_helper(x, BACKWARD, loopaxis=loopaxis)
 
 def fft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(len(x.shape), (axis,))
+    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
     return fftnd_helper(x, FORWARD, loopaxis=loopaxis)
 
 def ifft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(len(x.shape), (axis,))
+    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
     return fftnd_helper(x, BACKWARD, loopaxis=loopaxis)
 
 def fft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return fftnd_helper(x, FORWARD, loopaxis=loopaxis)
 
 def ifft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return fftnd_helper(x, BACKWARD, loopaxis=loopaxis)
 
 def fftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return fftnd_helper(x, FORWARD, loopaxis=loopaxis)
 
 def ifftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(len(x.shape), axes)
+    loopaxis = axes_to_loopaxis(x.ndim, axes)
     return fftnd_helper(x, BACKWARD, loopaxis=loopaxis)
 
 def test():
