@@ -3,8 +3,6 @@ import sys
 import numpy as np
 import cffi
 
-dll_path = os.path.join(os.environ["HOME"], "intel/mkl/lib/intel6")
-
 ffi = cffi.FFI()
 ffi.cdef("""
 enum DFTI_CONFIG_PARAM
@@ -52,7 +50,7 @@ MKL_LONG DftiErrorClass(MKL_LONG, MKL_LONG);
 """)
 
 lib = None
-def install(dll_path=dll_path):
+def install(dll_path=None):
     global lib
 
     dll_name = None
@@ -61,12 +59,26 @@ def install(dll_path=dll_path):
     elif sys.platform=="win32":
         dll_name = "mkl_rt.dll"
 
-    dll_pathname = os.path.join(dll_path, dll_name)
+    locations = []
+    if dll_path is not None:
+        locations.append(dll_path)
+    else:
+        # try some known locations
+        # WinPython
+        locations.append(os.path.join(os.path.dirname(np.__file__), "core"))
+        # MKL installed into our home directory
+        locations.append(os.path.join(os.environ["HOME"], "intel/mkl/lib/intel64"))
 
-    try:
-        lib = ffi.dlopen(dll_pathname)
-    except OSError as e:
-        print(e)
+    for dll_path in locations:
+        dll_pathname = os.path.join(dll_path, dll_name)
+        if os.path.exists(dll_pathname):
+            lib = ffi.dlopen(dll_pathname)
+            break
+    else:
+        try:
+            lib = ffi.dlopen(dll_name)
+        except OSError as e:
+            print(e)
 
 install()
 
