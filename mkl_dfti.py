@@ -83,6 +83,9 @@ def install(dll_path=None):
                 print(e)
     else:
         print("failed to load MKL libraries")
+        return False
+
+    return True
 
 install()
 
@@ -349,24 +352,4 @@ def fftn(x, axes=None):
 
 def ifftn(x, axes=None):
     return fftnd_helper(x, BACKWARD, axes)
-
-def test():
-    import matplotlib.pyplot as plt
-
-    ttt = np.linspace(0, 1, 1000, endpoint=False)
-    mat = np.zeros((10,1000), dtype=np.float32)
-    for row in range(mat.shape[0]):
-        freq = (row+1)*10
-        mat[row] = np.sin(2*np.pi*freq*ttt)
-
-    # test "column" fft
-    y = rfft(mat.T, axis=0)
-    y = y.T
-
-    for row in range(y.shape[0]):
-        plt.plot(np.abs(y[row]))
-    plt.show()
-
-if __name__=='__main__':
-    test()
 
