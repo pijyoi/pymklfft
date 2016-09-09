@@ -221,6 +221,49 @@ def axes_to_loopaxis(ndim, axes):
     else:
         raise ValueError("unsupported axes")
 
+def builder_real(iarray, oarray, axes):
+    if np.isrealobj(iarray) and np.iscomplexobj(oarray):
+        # r2c
+        real_array = iarray
+    elif np.isrealobj(oarray) and np.iscomplexobj(iarray):
+        # c2r
+        real_array = oarray
+    else:
+        raise ValueError("must have real and complex array")
+    
+    loopaxis = axes_to_loopaxis(iarray.ndim, axes)
+    in_place = iarray.ctypes.data==oarray.ctypes.data
+    
+    lengths = list(real_array.shape)
+    istrides = [x//iarray.itemsize for x in iarray.strides]
+    ostrides = [x//oarray.itemsize for x in oarray.strides]
+
+    if loopaxis is None:
+        howmany = 1
+    else:
+        howmany = lengths.pop(loopaxis)
+        idist = istrides.pop(loopaxis)
+        odist = ostrides.pop(loopaxis)
+
+    precision = ndarray_precision(iarray)
+    desc = DftiDescriptor(precision, lib.DFTI_REAL)
+    desc.create(lengths)
+
+    desc.setInputStrides(istrides)
+    desc.setOutputStrides(ostrides)
+
+    if howmany > 1:
+        desc.setValueInt(lib.DFTI_NUMBER_OF_TRANSFORMS, howmany)
+        desc.setInputDistance(idist)
+        desc.setOutputDistance(odist)
+
+    desc.setValueFloat(lib.DFTI_BACKWARD_SCALE, 1.0/np.product(lengths))
+
+    desc.setInPlace(in_place)
+    
+    desc.commit()
+    return desc
+
 def builder_complex(iarray, oarray, axes):
     loopaxis = axes_to_loopaxis(iarray.ndim, axes)
     in_place = iarray.ctypes.data==oarray.ctypes.data
@@ -279,34 +322,7 @@ def rfftnd_helper(array_in, dirn, axes=None):
         oarray = np.empty(rshape, c2r_dst_dtype(iarray.dtype))
         compute_args = (dirn, iarray, oarray)
 
-    lengths = list(rshape)
-    istrides = [x//iarray.itemsize for x in iarray.strides]
-    ostrides = [x//oarray.itemsize for x in oarray.strides]
-
-    if loopaxis is None:
-        howmany = 1
-    else:
-        howmany = lengths.pop(loopaxis)
-        idist = istrides.pop(loopaxis)
-        odist = ostrides.pop(loopaxis)
-
-    precision = ndarray_precision(iarray)
-    desc = DftiDescriptor(precision, lib.DFTI_REAL)
-    desc.create(lengths)
-
-    desc.setInputStrides(istrides)
-    desc.setOutputStrides(ostrides)
-
-    if howmany > 1:
-        desc.setValueInt(lib.DFTI_NUMBER_OF_TRANSFORMS, howmany)
-        desc.setInputDistance(idist)
-        desc.setOutputDistance(odist)
-
-    if dirn==BACKWARD:
-        desc.setValueFloat(lib.DFTI_BACKWARD_SCALE, 1.0/np.product(lengths))
-
-    desc.setInPlace(False)
-    desc.commit()
+    desc = builder_real(iarray, oarray, axes)
     desc.compute(*compute_args)
 
     return oarray
