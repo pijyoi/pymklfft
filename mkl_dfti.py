@@ -208,7 +208,21 @@ def get_realaxis(ndim, loopaxis):
     realaxis = allaxes[-1]
     return realaxis
 
-def rfftnd_helper(array_in, dirn, loopaxis=None):
+def axes_to_loopaxis(ndim, axes):
+    if axes is None:
+        return None
+    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
+    work = set(range(ndim))
+    work.difference_update(axes)
+    if len(work)==0:
+        return None
+    elif len(work)==1:
+        return work.pop()
+    else:
+        raise ValueError("unsupported axes")
+
+def rfftnd_helper(array_in, dirn, axes=None):
+    loopaxis = axes_to_loopaxis(array_in.ndim, axes)
     iarray = array_in
     ishape = iarray.shape
     realaxis = get_realaxis(iarray.ndim, loopaxis)
@@ -263,7 +277,8 @@ def rfftnd_helper(array_in, dirn, loopaxis=None):
 
     return oarray
 
-def fftnd_helper(array_in, dirn, loopaxis=None):
+def fftnd_helper(array_in, dirn, axes=None):
+    loopaxis = axes_to_loopaxis(array_in.ndim, axes)
     # if array_in is real-valued, we copy the input to the complex output
     # then do an in-place fft on the complex output array
     if np.isrealobj(array_in):
@@ -310,66 +325,41 @@ def fftnd_helper(array_in, dirn, loopaxis=None):
 
     return oarray
 
-def axes_to_loopaxis(ndim, axes):
-    if axes is None:
-        return None
-    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
-    work = set(range(ndim))
-    work.difference_update(axes)
-    if len(work)==0:
-        return None
-    elif len(work)==1:
-        return work.pop()
-    else:
-        raise ValueError("unsupported axes")
-
 def rfft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
-    return rfftnd_helper(x, FORWARD, loopaxis=loopaxis)
+    return rfftnd_helper(x, FORWARD, (axis,))
 
 def irfft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
-    return rfftnd_helper(x, BACKWARD, loopaxis=loopaxis)
+    return rfftnd_helper(x, BACKWARD, (axis,))
 
 def rfft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return rfftnd_helper(x, FORWARD, loopaxis=loopaxis)
+    return rfftnd_helper(x, FORWARD, axes)
 
 def irfft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return rfftnd_helper(x, BACKWARD, loopaxis=loopaxis)
+    return rfftnd_helper(x, BACKWARD, axes)
 
 def rfftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return rfftnd_helper(x, FORWARD, loopaxis=loopaxis)
+    return rfftnd_helper(x, FORWARD, axes)
 
 def irfftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return rfftnd_helper(x, BACKWARD, loopaxis=loopaxis)
+    return rfftnd_helper(x, BACKWARD, axes)
 
 def fft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
-    return fftnd_helper(x, FORWARD, loopaxis=loopaxis)
+    return fftnd_helper(x, FORWARD, (axis,))
 
 def ifft(x, axis=-1):
-    loopaxis = axes_to_loopaxis(x.ndim, (axis,))
-    return fftnd_helper(x, BACKWARD, loopaxis=loopaxis)
+    return fftnd_helper(x, BACKWARD, (axis,))
 
 def fft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return fftnd_helper(x, FORWARD, loopaxis=loopaxis)
+    return fftnd_helper(x, FORWARD, axes)
 
 def ifft2(x, axes=(-2,-1)):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return fftnd_helper(x, BACKWARD, loopaxis=loopaxis)
+    return fftnd_helper(x, BACKWARD, axes)
 
 def fftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return fftnd_helper(x, FORWARD, loopaxis=loopaxis)
+    return fftnd_helper(x, FORWARD, axes)
 
 def ifftn(x, axes=None):
-    loopaxis = axes_to_loopaxis(x.ndim, axes)
-    return fftnd_helper(x, BACKWARD, loopaxis=loopaxis)
+    return fftnd_helper(x, BACKWARD, axes)
 
 def test():
     import matplotlib.pyplot as plt
