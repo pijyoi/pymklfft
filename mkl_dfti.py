@@ -202,14 +202,13 @@ def r2c_dst_dtype(src_dtype):
 def c2r_dst_dtype(src_dtype):
     return np.dtype(src_dtype.char.lower())
 
-def get_realaxis(ndim, loopaxis):
-    # real axis is the last axis after excluding the loopaxis.
-    # NOTE: choice of last axis follows C row major convention
-    allaxes = list(range(ndim))
-    if loopaxis is not None:
-        allaxes.pop(loopaxis)
-    realaxis = allaxes[-1]
-    return realaxis
+def canonical_axes(ndim, axes):
+    if axes is None:
+        return list(range(ndim))
+    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
+    axes = list(set(axes))          # remove duplicates
+    axes.sort()
+    return axes
 
 def axes_to_loopaxis(ndim, axes):
     if axes is None:
@@ -271,10 +270,9 @@ def builder(iarray, oarray, axes):
     return desc
 
 def rfftnd_helper(array_in, dirn, axes=None):
-    loopaxis = axes_to_loopaxis(array_in.ndim, axes)
     iarray = array_in
     ishape = iarray.shape
-    realaxis = get_realaxis(iarray.ndim, loopaxis)
+    realaxis = canonical_axes(iarray.ndim, axes)[-1]
 
     if np.isrealobj(iarray):
         assert dirn==FORWARD
