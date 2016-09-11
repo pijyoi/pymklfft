@@ -210,19 +210,6 @@ def canonical_axes(ndim, axes):
     axes.sort()
     return axes
 
-def axes_to_loopaxis(ndim, axes):
-    if axes is None:
-        return None
-    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
-    work = set(range(ndim))
-    work.difference_update(axes)
-    if len(work)==0:
-        return None
-    elif len(work)==1:
-        return work.pop()
-    else:
-        raise ValueError("unsupported axes")
-
 def builder(iarray, oarray, axes):
     if np.iscomplexobj(iarray) and np.iscomplexobj(oarray):
         domain = lib.DFTI_COMPLEX
@@ -236,16 +223,20 @@ def builder(iarray, oarray, axes):
     else:
         raise ValueError("unsupported combination of array types")
     
-    loopaxis = axes_to_loopaxis(iarray.ndim, axes)
+    axes = canonical_axes(iarray.ndim, axes)
+    loopaxes = [x for x in range(iarray.ndim) if x not in axes]
+    if len(loopaxes) > 1:
+        raise ValueError("unsupported axes")
     in_place = iarray.ctypes.data==oarray.ctypes.data
     
     lengths = list(fftshape)
     istrides = [x//iarray.itemsize for x in iarray.strides]
     ostrides = [x//oarray.itemsize for x in oarray.strides]
 
-    if loopaxis is None:
+    if not loopaxes:
         howmany = 1
     else:
+        loopaxis = loopaxes[0]
         howmany = lengths.pop(loopaxis)
         idist = istrides.pop(loopaxis)
         odist = ostrides.pop(loopaxis)
