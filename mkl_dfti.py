@@ -157,10 +157,6 @@ class DftiDescriptor:
             rc = lib.DftiCreateDescriptor(self.handle, self.precision, self.domain, rank, lengths)
         raise_if_error(rc)
 
-        if self.domain==lib.DFTI_REAL:
-            # use CCE storage format
-            self.setValueInt(lib.DFTI_CONJUGATE_EVEN_STORAGE, lib.DFTI_COMPLEX_COMPLEX)
-
     def commit(self):
         rc = lib.DftiCommitDescriptor(self.handle[0])
         raise_if_error(rc)
@@ -257,6 +253,10 @@ def builder(iarray, oarray, axes):
 
     desc.setInPlace(in_place)
     
+    if domain==lib.DFTI_REAL:
+        # use CCE storage format
+        desc.setValueInt(lib.DFTI_CONJUGATE_EVEN_STORAGE, lib.DFTI_COMPLEX_COMPLEX)
+
     desc.commit()
     return desc
 
