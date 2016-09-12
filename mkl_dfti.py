@@ -206,6 +206,22 @@ def canonical_axes(ndim, axes):
     axes.sort()
     return axes
 
+def canonical_axes_shapes(ary, axes, shapes):
+    ndim = ary.ndim
+    if axes is None:
+        axes = list(range(ndim))
+    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
+    if len(set(axes)) != len(axes):
+        raise ValueError("duplicate axes")
+
+    if shapes is None:
+        shapes = [ary.shape[ax] for ax in axes]
+    if len(axes) != len(shapes):
+        raise ValueError("axes and shapes have different lengths")
+
+    axes_shapes = zip(axes, shapes)
+    return zip(*sorted(axes_shapes))
+
 def builder(iarray, oarray, axes):
     if np.iscomplexobj(iarray) and np.iscomplexobj(oarray):
         domain = lib.DFTI_COMPLEX
