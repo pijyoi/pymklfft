@@ -284,28 +284,44 @@ def builder(iarray, oarray, axes):
     desc.commit()
     return desc
 
-def rfftnd_helper(array_in, dirn, axes=None):
+def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
+    axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
+    realaxis = axes[-1]
+
     iarray = array_in
-    ishape = iarray.shape
-    realaxis = canonical_axes(iarray.ndim, axes)[-1]
+    rshape = list(fftshape)
+    cshape = list(fftshape)
 
     if np.isrealobj(iarray):
         assert dirn==FORWARD
-        rshape = list(ishape)
-        cshape = list(ishape)
-        cshape[realaxis] = cshape[realaxis]//2 + 1
+        cshape[realaxis] = rshape[realaxis]//2 + 1
 
-        oarray = np.empty(cshape, r2c_dst_dtype(iarray.dtype))
-        compute_args = (dirn, iarray, oarray)
+        ishape, oshape, odtype = rshape, cshape, r2c_dst_dtype(iarray.dtype)
+
     else:
         assert dirn==BACKWARD
-        # FIXME: only works if original length was even
-        rshape = list(ishape)
-        rshape[realaxis] = 2*(rshape[realaxis]-1)
-        cshape = list(ishape)
 
-        oarray = np.empty(rshape, c2r_dst_dtype(iarray.dtype))
-        compute_args = (dirn, iarray, oarray)
+        if fftlens is None:
+            # user didn't specify fftlens
+            # therefore fftshape is the shape of the complex input array
+            rshape[realaxis] = 2*(cshape[realaxis]-1)
+        else:
+            # user specified fftlens
+            # for irfft, that specifies the realfftlen
+            cshape[realaxis] = rshape[realaxis]//2 + 1
+
+        ishape, oshape, odtype = cshape, rshape, c2r_dst_dtype(iarray.dtype)
+
+    slices = [slice(min(ishape[ax], iarray.shape[ax])) for ax in range(iarray.ndim)]
+    if all([ishape[ax] <= iarray.shape[ax] for ax in axes]):
+        iarray = iarray[slices]
+    else:
+        array_tmp = np.zeros(ishape, dtype=iarray.dtype)
+        array_tmp[slices] = iarray[slices]
+        iarray = array_tmp
+
+    oarray = np.empty(oshape, odtype)
+    compute_args = (dirn, iarray, oarray)
 
     desc = builder(iarray, oarray, axes)
     desc.compute(*compute_args)
@@ -340,23 +356,25 @@ def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
 
     return oarray
 
-def rfft(x, axis=-1):
-    return rfftnd_helper(x, FORWARD, (axis,))
+def rfft(a, n=None, axis=-1):
+    s = None if n is None else (n,)
+    return rfftnd_helper(a, FORWARD, (axis,), s)
 
-def irfft(x, axis=-1):
-    return rfftnd_helper(x, BACKWARD, (axis,))
+def irfft(a, n=None, axis=-1):
+    s = None if n is None else (n,)
+    return rfftnd_helper(a, BACKWARD, (axis,), s)
 
-def rfft2(x, axes=(-2,-1)):
-    return rfftnd_helper(x, FORWARD, axes)
+def rfft2(a, s=None, axes=(-2,-1)):
+    return rfftnd_helper(a, FORWARD, axes, s)
 
-def irfft2(x, axes=(-2,-1)):
-    return rfftnd_helper(x, BACKWARD, axes)
+def irfft2(a, s=None, axes=(-2,-1)):
+    return rfftnd_helper(a, BACKWARD, axes, s)
 
-def rfftn(x, axes=None):
-    return rfftnd_helper(x, FORWARD, axes)
+def rfftn(a, s=None, axes=None):
+    return rfftnd_helper(a, FORWARD, axes, s)
 
-def irfftn(x, axes=None):
-    return rfftnd_helper(x, BACKWARD, axes)
+def irfftn(a, s=None, axes=None):
+    return rfftnd_helper(a, BACKWARD, axes, s)
 
 def fft(a, n=None, axis=-1):
     s = None if n is None else (n,)
