@@ -206,7 +206,7 @@ def canonical_axes(ndim, axes):
     axes.sort()
     return axes
 
-def canonical_axes_shapes(ary, axes, shapes):
+def canonical_axes_fftlens(ary, axes, fftlens):
     ndim = ary.ndim
     if axes is None:
         axes = list(range(ndim))
@@ -214,13 +214,21 @@ def canonical_axes_shapes(ary, axes, shapes):
     if len(set(axes)) != len(axes):
         raise ValueError("duplicate axes")
 
-    if shapes is None:
-        shapes = [ary.shape[ax] for ax in axes]
-    if len(axes) != len(shapes):
-        raise ValueError("axes and shapes have different lengths")
+    if fftlens is None:
+        fftlens = [ary.shape[ax] for ax in axes]
+    if len(axes) != len(fftlens):
+        raise ValueError("axes and fftlens have different lengths")
 
-    axes_shapes = zip(axes, shapes)
-    return zip(*sorted(axes_shapes))
+    # sort axes and make shapes follow the new sorted order
+    axes_fftlens = zip(axes, fftlens)
+    axes, fftlens = list(zip(*sorted(axes_fftlens)))
+
+    # construct full shape tuple
+    newshape = list(ary.shape)
+    for ax,sh in zip(axes, fftlens):
+        newshape[ax] = sh
+
+    return axes, newshape
 
 def builder(iarray, oarray, axes):
     if np.iscomplexobj(iarray) and np.iscomplexobj(oarray):
@@ -234,13 +242,13 @@ def builder(iarray, oarray, axes):
         fftshape = oarray.shape
     else:
         raise ValueError("unsupported combination of array types")
-    
+
     axes = canonical_axes(iarray.ndim, axes)
     loopaxes = [x for x in range(iarray.ndim) if x not in axes]
     if len(loopaxes) > 1:
         raise ValueError("unsupported axes")
     in_place = iarray.ctypes.data==oarray.ctypes.data
-    
+
     lengths = list(fftshape)
     istrides = [x//iarray.itemsize for x in iarray.strides]
     ostrides = [x//oarray.itemsize for x in oarray.strides]
@@ -268,7 +276,7 @@ def builder(iarray, oarray, axes):
     desc.setValueFloat(lib.DFTI_BACKWARD_SCALE, 1.0/np.product(lengths))
 
     desc.setInPlace(in_place)
-    
+
     if domain==lib.DFTI_REAL:
         # use CCE storage format
         desc.setValueInt(lib.DFTI_CONJUGATE_EVEN_STORAGE, lib.DFTI_COMPLEX_COMPLEX)
@@ -304,7 +312,17 @@ def rfftnd_helper(array_in, dirn, axes=None):
 
     return oarray
 
-def fftnd_helper(array_in, dirn, axes=None):
+def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
+    axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
+
+    slices = [slice(min(fftshape[ax], array_in.shape[ax])) for ax in range(array_in.ndim)]
+    if all([fftshape[ax] <= array_in.shape[ax] for ax in axes]):
+        array_in = array_in[slices]
+    else:
+        array_tmp = np.zeros(fftshape, dtype=array_in.dtype)
+        array_tmp[slices] = array_in[slices]
+        array_in = array_tmp
+
     # if array_in is real-valued, we copy the input to the complex output
     # then do an in-place fft on the complex output array
     if np.isrealobj(array_in):
@@ -340,21 +358,23 @@ def rfftn(x, axes=None):
 def irfftn(x, axes=None):
     return rfftnd_helper(x, BACKWARD, axes)
 
-def fft(x, axis=-1):
-    return fftnd_helper(x, FORWARD, (axis,))
+def fft(a, n=None, axis=-1):
+    s = None if n is None else (n,)
+    return fftnd_helper(a, FORWARD, (axis,), s)
 
-def ifft(x, axis=-1):
-    return fftnd_helper(x, BACKWARD, (axis,))
+def ifft(a, n=None, axis=-1):
+    s = None if n is None else (n,)
+    return fftnd_helper(a, BACKWARD, (axis,), s)
 
-def fft2(x, axes=(-2,-1)):
-    return fftnd_helper(x, FORWARD, axes)
+def fft2(a, s=None, axes=(-2,-1)):
+    return fftnd_helper(a, FORWARD, axes, s)
 
-def ifft2(x, axes=(-2,-1)):
-    return fftnd_helper(x, BACKWARD, axes)
+def ifft2(a, s=None, axes=(-2,-1)):
+    return fftnd_helper(a, BACKWARD, axes, s)
 
-def fftn(x, axes=None):
-    return fftnd_helper(x, FORWARD, axes)
+def fftn(a, s=None, axes=None):
+    return fftnd_helper(a, FORWARD, axes, s)
 
-def ifftn(x, axes=None):
-    return fftnd_helper(x, BACKWARD, axes)
+def ifftn(a, s=None, axes=None):
+    return fftnd_helper(a, BACKWARD, axes, s)
 
