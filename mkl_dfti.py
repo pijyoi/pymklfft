@@ -312,13 +312,13 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
 
         ishape, oshape, odtype = cshape, rshape, c2r_dst_dtype(iarray.dtype)
 
-    slices = [slice(min(ishape[ax], iarray.shape[ax])) for ax in range(iarray.ndim)]
+    slices = [slice(min(tup)) for tup in zip(ishape, iarray.shape)]
     if all([ishape[ax] <= iarray.shape[ax] for ax in axes]):
         iarray = iarray[slices]
     else:
-        array_tmp = np.zeros(ishape, dtype=iarray.dtype)
-        array_tmp[slices] = iarray[slices]
-        iarray = array_tmp
+        array_pad = np.zeros(ishape, dtype=iarray.dtype)
+        array_pad[slices] = iarray[slices]
+        iarray = array_pad
 
     oarray = np.empty(oshape, odtype)
     compute_args = (dirn, iarray, oarray)
@@ -331,13 +331,13 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
 def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
     axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
 
-    slices = [slice(min(fftshape[ax], array_in.shape[ax])) for ax in range(array_in.ndim)]
+    slices = [slice(min(tup)) for tup in zip(fftshape, array_in.shape)]
     if all([fftshape[ax] <= array_in.shape[ax] for ax in axes]):
         array_in = array_in[slices]
     else:
-        array_tmp = np.zeros(fftshape, dtype=array_in.dtype)
-        array_tmp[slices] = array_in[slices]
-        array_in = array_tmp
+        array_pad = np.zeros(fftshape, dtype=array_in.dtype)
+        array_pad[slices] = array_in[slices]
+        array_in = array_pad
 
     # if array_in is real-valued, we copy the input to the complex output
     # then do an in-place fft on the complex output array
