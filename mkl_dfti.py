@@ -313,11 +313,10 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
         ishape, oshape, odtype = cshape, rshape, c2r_dst_dtype(iarray.dtype)
 
     slices = [slice(min(tup)) for tup in zip(ishape, iarray.shape)]
-    if all([ishape[ax] <= iarray.shape[ax] for ax in axes]):
-        iarray = iarray[slices]
-    else:
+    iarray = iarray[slices]
+    if any([ishape[ax] > iarray.shape[ax] for ax in axes]):
         array_pad = np.zeros(ishape, dtype=iarray.dtype)
-        array_pad[slices] = iarray[slices]
+        array_pad[slices] = iarray
         iarray = array_pad
 
     oarray = np.empty(oshape, odtype)
@@ -332,11 +331,10 @@ def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
     axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
 
     slices = [slice(min(tup)) for tup in zip(fftshape, array_in.shape)]
-    if all([fftshape[ax] <= array_in.shape[ax] for ax in axes]):
-        array_in = array_in[slices]
-    else:
+    array_in = array_in[slices]
+    if any([fftshape[ax] > array_in.shape[ax] for ax in axes]):
         array_pad = np.zeros(fftshape, dtype=array_in.dtype)
-        array_pad[slices] = array_in[slices]
+        array_pad[slices] = array_in
         array_in = array_pad
 
     # if array_in is real-valued, we copy the input to the complex output
