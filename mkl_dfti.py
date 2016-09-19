@@ -230,6 +230,18 @@ def canonical_axes_fftlens(ary, axes, fftlens):
 
     return axes, newshape
 
+def cce_to_full_1d(ary, realaxis):
+    slices_src = [slice(None)]*ary.ndim
+    slices_dst = [slice(None)]*ary.ndim
+
+    end = (ary.shape[realaxis]+1)//2
+    slices_src[realaxis] = slice(1,end)
+    slices_dst[realaxis] = slice(-1,-end,-1)
+
+    view_src = ary[slices_src]
+    view_dst = ary[slices_dst]
+    np.conjugate(view_src, view_dst)
+
 def builder(iarray, oarray, axes):
     if np.iscomplexobj(iarray) and np.iscomplexobj(oarray):
         domain = lib.DFTI_COMPLEX
@@ -341,16 +353,22 @@ def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
     # then do an in-place fft on the complex output array
     if np.isrealobj(array_in):
         assert dirn==FORWARD
-        iarray = array_in.astype(r2c_dst_dtype(array_in.dtype))
-        oarray = iarray
-        compute_args = (dirn, iarray)
+        if len(axes)==1:
+            iarray = array_in
+            oarray = np.empty(iarray.shape, r2c_dst_dtype(iarray.dtype))
+            desc = builder(iarray, oarray, axes)
+            desc.compute(dirn, iarray, oarray)
+            cce_to_full_1d(oarray, axes[0])
+        else:
+            iarray = array_in.astype(r2c_dst_dtype(array_in.dtype))
+            oarray = iarray
+            desc = builder(iarray, oarray, axes)
+            desc.compute(dirn, iarray)
     else:
         iarray = array_in
         oarray = np.empty_like(iarray)
-        compute_args = (dirn, iarray, oarray)
-
-    desc = builder(iarray, oarray, axes)
-    desc.compute(*compute_args)
+        desc = builder(iarray, oarray, axes)
+        desc.compute(dirn, iarray, oarray)
 
     return oarray
 
