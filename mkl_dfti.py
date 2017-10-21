@@ -68,10 +68,13 @@ def install(dll_path=None):
         # try some known locations
         # Anaconda Linux
         locations.append(os.path.join(sys.exec_prefix, "lib"))
+        # Anaconda Windows
+        locations.append(os.path.join(sys.exec_prefix, "Library/bin"))
         # WinPython
         locations.append(os.path.join(os.path.dirname(np.__file__), "core"))
         # MKL installed into our home directory
-        locations.append(os.path.join(os.environ["HOME"], "intel/mkl/lib/intel64"))
+        if "HOME" in os.environ:
+            locations.append(os.path.join(os.environ["HOME"], "intel/mkl/lib/intel64"))
 
     for dll_path in locations:
         dll_pathname = os.path.join(dll_path, dll_name)
