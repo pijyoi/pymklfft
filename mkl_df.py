@@ -12,12 +12,17 @@ int dfdEditPPSpline1D(DFTaskPtr, int, int, int, const double[], int, const doubl
 int dfdConstruct1D(DFTaskPtr, int, int);
 int dfdInterpolate1D(DFTaskPtr, int, int, int, const double[], int, int, const int[], const double[], double[], int, int[]);
 int dfDeleteTask(DFTaskPtr *);
+int dfdEditPtr(DFTaskPtr, int, const double[]);
+int dfiEditVal(DFTaskPtr, int, int);
 
 #define DF_STATUS_OK 0
 
 #define DF_NO_HINT 0
 #define DF_NON_UNIFORM_PARTITION 1
 #define DF_MATRIX_STORAGE_ROWS 16
+
+#define DF_BC 4
+#define DF_BC_TYPE 21
 
 #define DF_PP_CUBIC 4
 
@@ -27,6 +32,8 @@ int dfDeleteTask(DFTaskPtr *);
 #define DF_NO_BC 0
 #define DF_BC_NOT_A_KNOT 1
 #define DF_BC_FREE_END 2
+#define DF_BC_1ST_LEFT_DER 4
+#define DF_BC_1ST_RIGHT_DER 8
 #define DF_BC_PERIODIC 64
 
 #define DF_NO_IC 0
@@ -107,6 +114,20 @@ class DfTask:
         scoeffhint = lib.DF_NO_HINT
         rc = lib.dfdEditPPSpline1D(self.task[0], s_order, s_type, bc_type, bc, ic_type, ic, ffi.cast("double*", self.scoeff.ctypes.data), scoeffhint)
         raise_if_error(rc)
+
+    def editval(self, attr, val):
+        rc = lib.dfiEditVal(self.task[0], attr, val)
+        raise_if_error(rc)
+
+    def editptr(self, attr, vals):
+        if not hasattr(self, 'attr_ptr'):
+            self.attr_ptr = {}
+        ptr = ffi.new("double[]", vals)
+        self.attr_ptr[attr] = ptr           # keep alive
+        rc = lib.dfdEditPtr(self.task[0], attr, ptr)
+        raise_if_error(rc)
+
+    def construct(self):
         rc = lib.dfdConstruct1D(self.task[0], lib.DF_PP_SPLINE, lib.DF_METHOD_STD)
         raise_if_error(rc)
 
@@ -131,39 +152,61 @@ class DfTask:
 class CubicSpline:
     def __init__(self, x, y, bc_type='not-a-knot'):
         if bc_type=='not-a-knot':
-            bc_type=lib.DF_BC_NOT_A_KNOT
+            bc_typecode=lib.DF_BC_NOT_A_KNOT
         elif bc_type=='periodic':
-            bc_type=lib.DF_BC_PERIODIC
-        elif bc_type=='clamped':
-            pass
+            bc_typecode=lib.DF_BC_PERIODIC
         elif bc_type=='natural':
-            bc_type=lib.DF_BC_FREE_END
+            bc_typecode=lib.DF_BC_FREE_END
+        else:
+            bc_typecode=lib.DF_NO_BC
             
-        self.dftask = DfTask(x, y, bc_type)
+        self.dftask = DfTask(x, y, bc_typecode)
+        if bc_type=='clamped':
+            self.dftask.editval(lib.DF_BC_TYPE, lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER)
+            self.dftask.editptr(lib.DF_BC, [0, 0])
+        
+        self.dftask.construct()
     
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
 
-if __name__=='__main__':
-    import matplotlib.pyplot as plt
-    # from scipy.interpolate import CubicSpline
+def test_bc_type(bc_type):        
+    # 2.25 is chosen so that the ends have different derivatives
+    freq = 2.25
+    
+    if bc_type=='periodic':
+        freq = int(freq)
     
     # 100 Hz sampling
-    x0 = 2*np.pi*2*np.linspace(0, 1, 101)
-    y0 = np.cos(x0)
-    dy0 = -np.sin(x0)
+    x0 = 2*np.pi*freq*np.linspace(0, 1, 101)
+    y0 = np.sin(x0)
+    dy0 = np.cos(x0)
+    
+    if bc_type=='periodic':
+        y0[-1] = y0[0]
     
     # 10 Hz sampling
     x1 = x0[::10].copy()
     y1 = y0[::10].copy()
-    cs = CubicSpline(x1, y1, bc_type='natural')
-    y = cs(x0)
-    dy = cs(x0, 1)
+    mkl_cs = CubicSpline(x1, y1, bc_type=bc_type)
+    spi_cs = spi.CubicSpline(x1, y1, bc_type=bc_type)
+    y = mkl_cs(x0)
+    dy = mkl_cs(x0, 1)
 
-    plt.plot(y0)
-    plt.plot(dy0)
-    plt.plot(y, '.')
-    plt.plot(dy, '.')
-    
+    plt.plot(y0, label='T0')
+    plt.plot(dy0, label='T1')
+    plt.plot(spi_cs(x0), 'x', label='s0')
+    plt.plot(spi_cs(x0, 1), 'x', label='s1')
+    plt.plot(mkl_cs(x0), '.', label='m0')
+    plt.plot(mkl_cs(x0, 1), '.', label='m1')
+
+    plt.title(bc_type)
+    plt.legend()
     plt.show()
+
+if __name__=='__main__':
+    import matplotlib.pyplot as plt
+    import scipy.interpolate as spi
     
+    for bc_type in ['not-a-knot', 'natural', 'periodic', 'clamped']:
+        test_bc_type(bc_type)
