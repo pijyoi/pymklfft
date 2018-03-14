@@ -28,6 +28,7 @@ int dfiEditVal(DFTaskPtr, int, int);
 
 #define DF_PP_NATURAL 2
 #define DF_PP_BESSEL 4
+#define DF_PP_AKIMA 5
 
 #define DF_NO_BC 0
 #define DF_BC_NOT_A_KNOT 1
@@ -100,13 +101,12 @@ def raise_if_error(rc):
         raise DfError(error_message(rc))
 
 class DfTask:
-    def __init__(self, x, y, bc_type=lib.DF_BC_FREE_END):
+    def __init__(self, x, y, bc_type=lib.DF_BC_FREE_END, s_type=lib.DF_PP_NATURAL):
         self.task = ffi.new("DFTaskPtr*")
         rc = lib.dfdNewTask1D(self.task, x.size, ffi.cast("double*", x.ctypes.data), lib.DF_NON_UNIFORM_PARTITION, 1, ffi.cast("double*", y.ctypes.data), lib.DF_NO_HINT)
         raise_if_error(rc)
         
         s_order = lib.DF_PP_CUBIC
-        s_type = lib.DF_PP_NATURAL
         bc = ffi.NULL
         ic_type = lib.DF_NO_IC
         ic = ffi.NULL
@@ -160,7 +160,7 @@ class CubicSpline:
         else:
             bc_typecode=lib.DF_NO_BC
             
-        self.dftask = DfTask(x, y, bc_typecode)
+        self.dftask = DfTask(x, y, bc_typecode, lib.DF_PP_NATURAL)
         if bc_type=='clamped':
             self.dftask.editval(lib.DF_BC_TYPE, lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER)
             self.dftask.editptr(lib.DF_BC, [0, 0])
@@ -170,11 +170,21 @@ class CubicSpline:
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
 
-def test_bc_type(bc_type):        
+class Akima1DInterpolator:
+    def __init__(self, x, y):
+        # although mkl does support other boundary conditions for Akima,
+        # scipy's Akima corresponds to no-boundary-condition
+        self.dftask = DfTask(x, y, lib.DF_NO_BC, lib.DF_PP_AKIMA)
+        self.dftask.construct()
+
+    def __call__(self, x, nu=0):
+        return self.dftask.interpolate(x, ndorder=nu+1)
+
+def test_code(name):
     # 2.25 is chosen so that the ends have different derivatives
     freq = 2.25
     
-    if bc_type=='periodic':
+    if name=='periodic':
         freq = int(freq)
     
     # 100 Hz sampling
@@ -182,14 +192,18 @@ def test_bc_type(bc_type):
     y0 = np.sin(x0)
     dy0 = np.cos(x0)
     
-    if bc_type=='periodic':
+    if name=='periodic':
         y0[-1] = y0[0]
     
     # 10 Hz sampling
     x1 = x0[::10].copy()
     y1 = y0[::10].copy()
-    mkl_cs = CubicSpline(x1, y1, bc_type=bc_type)
-    spi_cs = spi.CubicSpline(x1, y1, bc_type=bc_type)
+    if name=='akima':
+        mkl_cs = Akima1DInterpolator(x1, y1)
+        spi_cs = spi.Akima1DInterpolator(x1, y1)
+    else:
+        mkl_cs = CubicSpline(x1, y1, bc_type=name)
+        spi_cs = spi.CubicSpline(x1, y1, bc_type=name)
     y = mkl_cs(x0)
     dy = mkl_cs(x0, 1)
 
@@ -200,7 +214,7 @@ def test_bc_type(bc_type):
     plt.plot(mkl_cs(x0), '.', label='m0')
     plt.plot(mkl_cs(x0, 1), '.', label='m1')
 
-    plt.title(bc_type)
+    plt.title(name)
     plt.legend()
     plt.show()
 
@@ -208,5 +222,5 @@ if __name__=='__main__':
     import matplotlib.pyplot as plt
     import scipy.interpolate as spi
     
-    for bc_type in ['not-a-knot', 'natural', 'periodic', 'clamped']:
-        test_bc_type(bc_type)
+    for name in ['not-a-knot', 'natural', 'periodic', 'clamped', 'akima']:
+        test_code(name)
