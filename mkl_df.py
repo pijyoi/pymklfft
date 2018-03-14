@@ -21,12 +21,15 @@ int dfiEditVal(DFTaskPtr, int, int);
 #define DF_NON_UNIFORM_PARTITION 1
 #define DF_MATRIX_STORAGE_ROWS 16
 
+#define DF_IC 3
 #define DF_BC 4
+#define DF_IC_TYPE 20
 #define DF_BC_TYPE 21
 
 #define DF_PP_CUBIC 4
 
 #define DF_PP_NATURAL 2
+#define DF_PP_HERMITE 3
 #define DF_PP_BESSEL 4
 #define DF_PP_AKIMA 5
 
@@ -38,6 +41,7 @@ int dfiEditVal(DFTaskPtr, int, int);
 #define DF_BC_PERIODIC 64
 
 #define DF_NO_IC 0
+#define DF_IC_1ST_DER 1
 
 #define DF_PP_SPLINE 0
 
@@ -170,6 +174,38 @@ class CubicSpline:
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
 
+class PchipInterpolator:
+    def __init__(self, x, y):
+        h = np.diff(x)
+        d = np.diff(y) / h
+
+        der1st = [0]*x.size
+
+        for k in range(1, x.size-1):
+            if d[k-1]*d[k] <= 0:    # different sign or either zero
+                der = 0
+            else:
+                w1 = 2*h[k] + h[k-1]
+                w2 = h[k] + 2*h[k-1]
+                der = (w1+w2) / (w1/d[k-1] + w2/d[k])
+            der1st[k] = der
+
+        self.dftask = DfTask(x, y, lib.DF_NO_BC, lib.DF_PP_HERMITE)
+
+        der1st[0] = ((2*h[0] + h[1])*d[0] - h[0]*d[1]) / (h[0] + h[1])
+        der1st[-1] = ((2*h[-1] + h[-2])*d[-1] - h[-1]*d[-2]) / (h[-1] + h[-2])
+
+        self.dftask.editval(lib.DF_IC_TYPE, lib.DF_IC_1ST_DER)
+        self.dftask.editptr(lib.DF_IC, der1st[1:-1])
+
+        self.dftask.editval(lib.DF_BC_TYPE, lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER)
+        self.dftask.editptr(lib.DF_BC, [der1st[0], der1st[-1]])
+
+        self.dftask.construct()
+
+    def __call__(self, x, nu=0):
+        return self.dftask.interpolate(x, ndorder=nu+1)
+
 class Akima1DInterpolator:
     def __init__(self, x, y):
         # although mkl does support other boundary conditions for Akima,
@@ -201,6 +237,9 @@ def test_code(name):
     if name=='akima':
         mkl_cs = Akima1DInterpolator(x1, y1)
         spi_cs = spi.Akima1DInterpolator(x1, y1)
+    elif name=='pchip':
+        mkl_cs = PchipInterpolator(x1, y1)
+        spi_cs = spi.PchipInterpolator(x1, y1)
     else:
         mkl_cs = CubicSpline(x1, y1, bc_type=name)
         spi_cs = spi.CubicSpline(x1, y1, bc_type=name)
@@ -222,5 +261,5 @@ if __name__=='__main__':
     import matplotlib.pyplot as plt
     import scipy.interpolate as spi
     
-    for name in ['not-a-knot', 'natural', 'periodic', 'clamped', 'akima']:
+    for name in ['not-a-knot', 'natural', 'periodic', 'clamped', 'akima', 'pchip']:
         test_code(name)
