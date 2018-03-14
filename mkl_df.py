@@ -127,7 +127,9 @@ class DfTask:
     def editptr(self, attr, vals):
         if not hasattr(self, 'attr_ptr'):
             self.attr_ptr = {}
-        ptr = ffi.new("double[]", vals)
+        # ptr = ffi.new("double[]", vals)
+        vals = np.asarray(vals, dtype=np.float64)
+        ptr = ffi.cast("double*", vals.ctypes.data)
         self.attr_ptr[attr] = ptr           # keep alive
         rc = lib.dfdEditPtr(self.task[0], attr, ptr)
         raise_if_error(rc)
@@ -178,32 +180,41 @@ class CubicSpline:
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
 
+def pchipend(h1, h2, del1, del2):
+    d = ((2*h1+h2)*del1 - h1*del2) / (h1+h2)
+    if np.sign(d) != np.sign(del1):
+        d = 0
+    elif np.sign(del1) != np.sign(del2) and abs(d) > abs(3*del1):
+        d = 3*del1
+    return d
+
+def pchipslopes(h, delta):
+    # Numerical Computing with MATLAB chapter 3
+    d = np.zeros(h.size+1)
+
+    for k in range(1, d.size-1):
+        if delta[k-1]*delta[k] > 0:    # same sign and neither zero
+            w1 = 2*h[k] + h[k-1]
+            w2 = h[k] + 2*h[k-1]
+            d[k] = (w1+w2) / (w1/delta[k-1] + w2/delta[k])
+
+    d[0] = pchipend(h[0],h[1],delta[0],delta[1])
+    d[-1] = pchipend(h[-1],h[-2],delta[-1],delta[-2])
+    return d
+
 class PchipInterpolator:
     def __init__(self, x, y):
         h = np.diff(x)
-        d = np.diff(y) / h
-
-        der1st = [0]*x.size
-
-        for k in range(1, x.size-1):
-            if d[k-1]*d[k] <= 0:    # different sign or either zero
-                der = 0
-            else:
-                w1 = 2*h[k] + h[k-1]
-                w2 = h[k] + 2*h[k-1]
-                der = (w1+w2) / (w1/d[k-1] + w2/d[k])
-            der1st[k] = der
-
-        der1st[0] = ((2*h[0] + h[1])*d[0] - h[0]*d[1]) / (h[0] + h[1])
-        der1st[-1] = ((2*h[-1] + h[-2])*d[-1] - h[-1]*d[-2]) / (h[-1] + h[-2])
+        delta = np.diff(y) / h
+        d = pchipslopes(h, delta)
 
         self.dftask = DfTask(x, y, lib.DF_PP_HERMITE)
 
         self.dftask.editval(lib.DF_IC_TYPE, lib.DF_IC_1ST_DER)
-        self.dftask.editptr(lib.DF_IC, der1st[1:-1])
+        self.dftask.editptr(lib.DF_IC, d[1:-1])
 
         self.dftask.editval(lib.DF_BC_TYPE, lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER)
-        self.dftask.editptr(lib.DF_BC, [der1st[0], der1st[-1]])
+        self.dftask.editptr(lib.DF_BC, [d[0], d[-1]])
 
         self.dftask.construct()
 
