@@ -105,19 +105,32 @@ def raise_if_error(rc):
         raise DfError(error_message(rc))
 
 class DfTask:
-    def __init__(self, x, y, s_type=lib.DF_PP_NATURAL):
+    def __init__(self, x, y):
+        self.x = np.asarray(x, dtype=np.float64)
+        self.y = np.asarray(y, dtype=np.float64)
         self.task = ffi.new("DFTaskPtr*")
-        rc = lib.dfdNewTask1D(self.task, x.size, ffi.cast("double*", x.ctypes.data), lib.DF_NON_UNIFORM_PARTITION, 1, ffi.cast("double*", y.ctypes.data), lib.DF_NO_HINT)
+        x_ptr = ffi.cast("double*", x.ctypes.data)
+        y_ptr = ffi.cast("double*", y.ctypes.data)
+        rc = lib.dfdNewTask1D(self.task, x.size, x_ptr, lib.DF_NON_UNIFORM_PARTITION, 1, y_ptr, lib.DF_NO_HINT)
         raise_if_error(rc)
+
+    def editspline(self, s_type, bc_type=lib.DF_NO_BC, bc=None, ic_type=lib.DF_NO_IC, ic=None):
+        bc_ptr = ffi.NULL
+        if bc is not None:
+            self.bc = np.asarray(bc, dtype=np.float64)
+            bc_ptr = ffi.cast("double*", self.bc.ctypes.data)
+
+        ic_ptr = ffi.NULL
+        if ic is not None:
+            self.ic = np.asarray(ic, dtype=np.float64)
+            ic_ptr = ffi.cast("double*", self.ic.ctypes.data)
         
         s_order = lib.DF_PP_CUBIC
-        bc_type = lib.DF_NO_BC
-        bc = ffi.NULL
-        ic_type = lib.DF_NO_IC
-        ic = ffi.NULL
-        self.scoeff = np.empty((x.size-1)*s_order, dtype=x.dtype)
+        self.scoeff = np.empty((self.x.size-1)*s_order, dtype=self.x.dtype)
+        scoeff_ptr = ffi.cast("double*", self.scoeff.ctypes.data)
         scoeffhint = lib.DF_NO_HINT
-        rc = lib.dfdEditPPSpline1D(self.task[0], s_order, s_type, bc_type, bc, ic_type, ic, ffi.cast("double*", self.scoeff.ctypes.data), scoeffhint)
+
+        rc = lib.dfdEditPPSpline1D(self.task[0], s_order, s_type, bc_type, bc_ptr, ic_type, ic_ptr, scoeff_ptr, scoeffhint)
         raise_if_error(rc)
 
     def editval(self, attr, val):
@@ -127,11 +140,9 @@ class DfTask:
     def editptr(self, attr, vals):
         if not hasattr(self, 'attr_ptr'):
             self.attr_ptr = {}
-        # ptr = ffi.new("double[]", vals)
         vals = np.asarray(vals, dtype=np.float64)
-        ptr = ffi.cast("double*", vals.ctypes.data)
-        self.attr_ptr[attr] = ptr           # keep alive
-        rc = lib.dfdEditPtr(self.task[0], attr, ptr)
+        self.attr_ptr[attr] = vals           # keep alive
+        rc = lib.dfdEditPtr(self.task[0], attr, ffi.cast("double*", vals.ctypes.data))
         raise_if_error(rc)
 
     def construct(self):
@@ -148,7 +159,9 @@ class DfTask:
         r = np.empty_like(site)
         rhint = lib.DF_MATRIX_STORAGE_ROWS
         cell = ffi.NULL
-        rc = lib.dfdInterpolate1D(self.task[0], lib.DF_INTERP, lib.DF_METHOD_PP, site.size, ffi.cast("double*", site.ctypes.data), sitehint, ndorder, dorder, datahint, ffi.cast("double*", r.ctypes.data), rhint, cell)
+        site_ptr = ffi.cast("double*", site.ctypes.data)
+        r_ptr = ffi.cast("double*", r.ctypes.data)
+        rc = lib.dfdInterpolate1D(self.task[0], lib.DF_INTERP, lib.DF_METHOD_PP, site.size, site_ptr, sitehint, ndorder, dorder, datahint, r_ptr, rhint, cell)
         raise_if_error(rc)
         return r
     
@@ -158,23 +171,21 @@ class DfTask:
 
 class CubicSpline:
     def __init__(self, x, y, bc_type='not-a-knot'):
+        bc = None
         if bc_type=='not-a-knot':
-            bc_typecode=lib.DF_BC_NOT_A_KNOT
+            bc_type=lib.DF_BC_NOT_A_KNOT
         elif bc_type=='periodic':
-            bc_typecode=lib.DF_BC_PERIODIC
+            bc_type=lib.DF_BC_PERIODIC
         elif bc_type=='natural':
-            bc_typecode=lib.DF_BC_FREE_END
+            bc_type=lib.DF_BC_FREE_END
         elif bc_type=='clamped':
-            bc_typecode=lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER
+            bc_type=lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER
+            bc = [0, 0]
         else:
-            bc_typecode=lib.DF_NO_BC
+            bc_type=lib.DF_NO_BC
             
-        self.dftask = DfTask(x, y, lib.DF_PP_NATURAL)
-        self.dftask.editval(lib.DF_BC_TYPE, bc_typecode)
-
-        if bc_type=='clamped':
-            self.dftask.editptr(lib.DF_BC, [0, 0])
-        
+        self.dftask = DfTask(x, y)
+        self.dftask.editspline(lib.DF_PP_NATURAL, bc_type=bc_type, bc=bc)
         self.dftask.construct()
     
     def __call__(self, x, nu=0):
@@ -208,14 +219,10 @@ class PchipInterpolator:
         delta = np.diff(y) / h
         d = pchipslopes(h, delta)
 
-        self.dftask = DfTask(x, y, lib.DF_PP_HERMITE)
-
-        self.dftask.editval(lib.DF_IC_TYPE, lib.DF_IC_1ST_DER)
-        self.dftask.editptr(lib.DF_IC, d[1:-1])
-
-        self.dftask.editval(lib.DF_BC_TYPE, lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER)
-        self.dftask.editptr(lib.DF_BC, [d[0], d[-1]])
-
+        self.dftask = DfTask(x, y)
+        bc_type = lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER
+        ic_type = lib.DF_IC_1ST_DER
+        self.dftask.editspline(lib.DF_PP_HERMITE, bc_type=bc_type, bc=[d[0],d[-1]], ic_type=ic_type, ic=d[1:-1])
         self.dftask.construct()
 
     def __call__(self, x, nu=0):
@@ -225,7 +232,8 @@ class Akima1DInterpolator:
     def __init__(self, x, y):
         # although mkl does support other boundary conditions for Akima,
         # scipy's Akima corresponds to no-boundary-condition
-        self.dftask = DfTask(x, y, lib.DF_PP_AKIMA)
+        self.dftask = DfTask(x, y)
+        self.dftask.editspline(lib.DF_PP_AKIMA)
         self.dftask.construct()
 
     def __call__(self, x, nu=0):
