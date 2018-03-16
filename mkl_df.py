@@ -266,8 +266,6 @@ def test_code(name):
     else:
         mkl_cs = CubicSpline(x1, y1, bc_type=name)
         spi_cs = spi.CubicSpline(x1, y1, bc_type=name)
-    y = mkl_cs(x0)
-    dy = mkl_cs(x0, 1)
 
     plt.plot(y0, label='T0')
     plt.plot(dy0, label='T1')
