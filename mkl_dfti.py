@@ -241,8 +241,8 @@ def cce_to_full_1d(ary, realaxis):
     slices_src[realaxis] = slice(1,end)
     slices_dst[realaxis] = slice(-1,-end,-1)
 
-    view_src = ary[slices_src]
-    view_dst = ary[slices_dst]
+    view_src = ary[tuple(slices_src)]
+    view_dst = ary[tuple(slices_dst)]
     np.conjugate(view_src, view_dst)
 
 def builder(iarray, oarray, axes):
@@ -327,7 +327,7 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
 
         ishape, oshape, odtype = cshape, rshape, c2r_dst_dtype(iarray.dtype)
 
-    slices = [slice(min(tup)) for tup in zip(ishape, iarray.shape)]
+    slices = tuple([slice(min(tup)) for tup in zip(ishape, iarray.shape)])
     iarray = iarray[slices]
     if any([ishape[ax] > iarray.shape[ax] for ax in axes]):
         array_pad = np.zeros(ishape, dtype=iarray.dtype)
@@ -345,7 +345,7 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
 def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
     axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
 
-    slices = [slice(min(tup)) for tup in zip(fftshape, array_in.shape)]
+    slices = tuple([slice(min(tup)) for tup in zip(fftshape, array_in.shape)])
     array_in = array_in[slices]
     if any([fftshape[ax] > array_in.shape[ax] for ax in axes]):
         array_pad = np.zeros(fftshape, dtype=array_in.dtype)
