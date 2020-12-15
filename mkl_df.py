@@ -7,10 +7,13 @@ ffi = cffi.FFI()
 ffi.cdef("""
 typedef void* DFTaskPtr;
 
-int dfdNewTask1D(DFTaskPtr *, int, const double[], int, int, const double[], int);
-int dfdEditPPSpline1D(DFTaskPtr, int, int, int, const double[], int, const double[], const double[], int);
+int dfdNewTask1D(DFTaskPtr *, int, const double[], int, int, const double[],
+                 int);
+int dfdEditPPSpline1D(DFTaskPtr, int, int, int, const double[], int,
+                      const double[], const double[], int);
 int dfdConstruct1D(DFTaskPtr, int, int);
-int dfdInterpolate1D(DFTaskPtr, int, int, int, const double[], int, int, const int[], const double[], double[], int, int[]);
+int dfdInterpolate1D(DFTaskPtr, int, int, int, const double[], int, int,
+                     const int[], const double[], double[], int, int[]);
 int dfDeleteTask(DFTaskPtr *);
 int dfdEditPtr(DFTaskPtr, int, const double[]);
 int dfiEditVal(DFTaskPtr, int, int);
@@ -54,13 +57,15 @@ int dfiEditVal(DFTaskPtr, int, int);
 """)
 
 lib = None
+
+
 def install(dll_path=None):
     global lib
 
     dll_name = None
     if sys.platform.startswith("linux"):
         dll_name = "libmkl_rt.so"
-    elif sys.platform=="win32":
+    elif sys.platform == "win32":
         dll_name = "mkl_rt.dll"
 
     locations = []
@@ -76,7 +81,8 @@ def install(dll_path=None):
         locations.append(os.path.join(os.path.dirname(np.__file__), "core"))
         # MKL installed into our home directory
         if "HOME" in os.environ:
-            locations.append(os.path.join(os.environ["HOME"], "intel/mkl/lib/intel64"))
+            locations.append(os.path.join(
+                os.environ["HOME"], "intel/mkl/lib/intel64"))
 
     for dll_path in locations:
         dll_pathname = os.path.join(dll_path, dll_name)
@@ -92,17 +98,22 @@ def install(dll_path=None):
 
     return True
 
+
 install()
+
 
 class DfError(Exception):
     pass
 
+
 def error_message(rc):
     return "error code {}".format(rc)
 
+
 def raise_if_error(rc):
-    if rc!=lib.DF_STATUS_OK:
+    if rc != lib.DF_STATUS_OK:
         raise DfError(error_message(rc))
+
 
 class DfTask:
     def __init__(self, x, y):
@@ -111,10 +122,13 @@ class DfTask:
         self.task = ffi.new("DFTaskPtr*")
         x_ptr = ffi.cast("double*", x.ctypes.data)
         y_ptr = ffi.cast("double*", y.ctypes.data)
-        rc = lib.dfdNewTask1D(self.task, x.size, x_ptr, lib.DF_NON_UNIFORM_PARTITION, 1, y_ptr, lib.DF_NO_HINT)
+        rc = lib.dfdNewTask1D(
+            self.task, x.size, x_ptr, lib.DF_NON_UNIFORM_PARTITION, 1, y_ptr,
+            lib.DF_NO_HINT)
         raise_if_error(rc)
 
-    def editspline(self, s_type, bc_type=lib.DF_NO_BC, bc=None, ic_type=lib.DF_NO_IC, ic=None):
+    def editspline(self, s_type, bc_type=lib.DF_NO_BC, bc=None,
+                   ic_type=lib.DF_NO_IC, ic=None):
         bc_ptr = ffi.NULL
         if bc is not None:
             self.bc = np.asarray(bc, dtype=np.float64)
@@ -124,13 +138,15 @@ class DfTask:
         if ic is not None:
             self.ic = np.asarray(ic, dtype=np.float64)
             ic_ptr = ffi.cast("double*", self.ic.ctypes.data)
-        
+
         s_order = lib.DF_PP_CUBIC
         self.scoeff = np.empty((self.x.size-1)*s_order, dtype=self.x.dtype)
         scoeff_ptr = ffi.cast("double*", self.scoeff.ctypes.data)
         scoeffhint = lib.DF_NO_HINT
 
-        rc = lib.dfdEditPPSpline1D(self.task[0], s_order, s_type, bc_type, bc_ptr, ic_type, ic_ptr, scoeff_ptr, scoeffhint)
+        rc = lib.dfdEditPPSpline1D(
+            self.task[0], s_order, s_type, bc_type, bc_ptr, ic_type, ic_ptr,
+            scoeff_ptr, scoeffhint)
         raise_if_error(rc)
 
     def editval(self, attr, val):
@@ -142,18 +158,21 @@ class DfTask:
             self.attr_ptr = {}
         vals = np.asarray(vals, dtype=np.float64)
         self.attr_ptr[attr] = vals           # keep alive
-        rc = lib.dfdEditPtr(self.task[0], attr, ffi.cast("double*", vals.ctypes.data))
+        rc = lib.dfdEditPtr(self.task[0], attr, ffi.cast(
+            "double*", vals.ctypes.data))
         raise_if_error(rc)
 
     def construct(self):
-        rc = lib.dfdConstruct1D(self.task[0], lib.DF_PP_SPLINE, lib.DF_METHOD_STD)
+        rc = lib.dfdConstruct1D(
+            self.task[0], lib.DF_PP_SPLINE, lib.DF_METHOD_STD)
         raise_if_error(rc)
 
     def interpolate(self, site, ndorder=1):
         sitehint = lib.DF_NON_UNIFORM_PARTITION
         dorder = ffi.new("int[]", ndorder)
         dorder[ndorder-1] = 1
-        # there is an error with Intel's example, datahint is a float array, just happens that DF_NO_APRIORI_INFO=0
+        # there is an error with Intel's example, datahint is a float array,
+        # just happens that DF_NO_APRIORI_INFO=0
         # datahint = lib.DF_NO_APRIORI_INFO
         datahint = ffi.NULL
         r = np.empty_like(site)
@@ -161,35 +180,39 @@ class DfTask:
         cell = ffi.NULL
         site_ptr = ffi.cast("double*", site.ctypes.data)
         r_ptr = ffi.cast("double*", r.ctypes.data)
-        rc = lib.dfdInterpolate1D(self.task[0], lib.DF_INTERP, lib.DF_METHOD_PP, site.size, site_ptr, sitehint, ndorder, dorder, datahint, r_ptr, rhint, cell)
+        rc = lib.dfdInterpolate1D(
+            self.task[0], lib.DF_INTERP, lib.DF_METHOD_PP, site.size, site_ptr,
+            sitehint, ndorder, dorder, datahint, r_ptr, rhint, cell)
         raise_if_error(rc)
         return r
-    
+
     def __del__(self):
         rc = lib.dfDeleteTask(self.task)
         raise_if_error(rc)
 
+
 class CubicSpline:
     def __init__(self, x, y, bc_type='not-a-knot'):
         bc = None
-        if bc_type=='not-a-knot':
-            bc_type=lib.DF_BC_NOT_A_KNOT
-        elif bc_type=='periodic':
-            bc_type=lib.DF_BC_PERIODIC
-        elif bc_type=='natural':
-            bc_type=lib.DF_BC_FREE_END
-        elif bc_type=='clamped':
-            bc_type=lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER
+        if bc_type == 'not-a-knot':
+            bc_type = lib.DF_BC_NOT_A_KNOT
+        elif bc_type == 'periodic':
+            bc_type = lib.DF_BC_PERIODIC
+        elif bc_type == 'natural':
+            bc_type = lib.DF_BC_FREE_END
+        elif bc_type == 'clamped':
+            bc_type = lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER
             bc = [0, 0]
         else:
-            bc_type=lib.DF_NO_BC
-            
+            bc_type = lib.DF_NO_BC
+
         self.dftask = DfTask(x, y)
         self.dftask.editspline(lib.DF_PP_NATURAL, bc_type=bc_type, bc=bc)
         self.dftask.construct()
-    
+
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
+
 
 def pchipend(h1, h2, del1, del2):
     d = ((2*h1+h2)*del1 - h1*del2) / (h1+h2)
@@ -198,6 +221,7 @@ def pchipend(h1, h2, del1, del2):
     elif np.sign(del1) != np.sign(del2) and abs(d) > abs(3*del1):
         d = 3*del1
     return d
+
 
 def pchipslopes(h, delta):
     # Numerical Computing with MATLAB chapter 3
@@ -209,9 +233,10 @@ def pchipslopes(h, delta):
             w2 = h[k] + 2*h[k-1]
             d[k] = (w1+w2) / (w1/delta[k-1] + w2/delta[k])
 
-    d[0] = pchipend(h[0],h[1],delta[0],delta[1])
-    d[-1] = pchipend(h[-1],h[-2],delta[-1],delta[-2])
+    d[0] = pchipend(h[0], h[1], delta[0], delta[1])
+    d[-1] = pchipend(h[-1], h[-2], delta[-1], delta[-2])
     return d
+
 
 class PchipInterpolator:
     def __init__(self, x, y):
@@ -222,11 +247,13 @@ class PchipInterpolator:
         self.dftask = DfTask(x, y)
         bc_type = lib.DF_BC_1ST_LEFT_DER | lib.DF_BC_1ST_RIGHT_DER
         ic_type = lib.DF_IC_1ST_DER
-        self.dftask.editspline(lib.DF_PP_HERMITE, bc_type=bc_type, bc=[d[0],d[-1]], ic_type=ic_type, ic=d[1:-1])
+        self.dftask.editspline(lib.DF_PP_HERMITE, bc_type=bc_type, bc=[
+                               d[0], d[-1]], ic_type=ic_type, ic=d[1:-1])
         self.dftask.construct()
 
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
+
 
 class Akima1DInterpolator:
     def __init__(self, x, y):
@@ -239,28 +266,29 @@ class Akima1DInterpolator:
     def __call__(self, x, nu=0):
         return self.dftask.interpolate(x, ndorder=nu+1)
 
+
 def test_code(name):
     # 2.25 is chosen so that the ends have different derivatives
     freq = 2.25
-    
-    if name=='periodic':
+
+    if name == 'periodic':
         freq = int(freq)
-    
+
     # 100 Hz sampling
     x0 = 2*np.pi*freq*np.linspace(0, 1, 101)
     y0 = np.sin(x0)
     dy0 = np.cos(x0)
-    
-    if name=='periodic':
+
+    if name == 'periodic':
         y0[-1] = y0[0]
-    
+
     # 10 Hz sampling
     x1 = x0[::10].copy()
     y1 = y0[::10].copy()
-    if name=='akima':
+    if name == 'akima':
         mkl_cs = Akima1DInterpolator(x1, y1)
         spi_cs = spi.Akima1DInterpolator(x1, y1)
-    elif name=='pchip':
+    elif name == 'pchip':
         mkl_cs = PchipInterpolator(x1, y1)
         spi_cs = spi.PchipInterpolator(x1, y1)
     else:
@@ -278,9 +306,11 @@ def test_code(name):
     plt.legend()
     plt.show()
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import scipy.interpolate as spi
-    
-    for name in ['not-a-knot', 'natural', 'periodic', 'clamped', 'akima', 'pchip']:
+
+    for name in ['not-a-knot', 'natural', 'periodic', 'clamped', 'akima',
+                 'pchip']:
         test_code(name)

@@ -52,13 +52,15 @@ MKL_LONG DftiErrorClass(MKL_LONG, MKL_LONG);
 """)
 
 lib = None
+
+
 def install(dll_path=None):
     global lib
 
     dll_name = None
     if sys.platform.startswith("linux"):
         dll_name = "libmkl_rt.so"
-    elif sys.platform=="win32":
+    elif sys.platform == "win32":
         dll_name = "mkl_rt.dll"
 
     locations = []
@@ -74,7 +76,8 @@ def install(dll_path=None):
         locations.append(os.path.join(os.path.dirname(np.__file__), "core"))
         # MKL installed into our home directory
         if "HOME" in os.environ:
-            locations.append(os.path.join(os.environ["HOME"], "intel/mkl/lib/intel64"))
+            locations.append(os.path.join(
+                os.environ["HOME"], "intel/mkl/lib/intel64"))
 
     for dll_path in locations:
         dll_pathname = os.path.join(dll_path, dll_name)
@@ -90,17 +93,22 @@ def install(dll_path=None):
 
     return True
 
+
 install()
+
 
 class DftiError(Exception):
     pass
 
+
 def error_message(rc):
     return ffi.string(lib.DftiErrorMessage(rc))
 
+
 def raise_if_error(rc):
-    if rc!=0:
+    if rc != 0:
         raise DftiError(error_message(rc))
+
 
 def ndarray_precision(arr):
     char = arr.dtype.char
@@ -110,6 +118,7 @@ def ndarray_precision(arr):
         return lib.DFTI_DOUBLE
     else:
         raise ValueError("unsupported dtype")
+
 
 class DftiDescriptor:
     def __init__(self, precision, domain):
@@ -152,12 +161,14 @@ class DftiDescriptor:
             dims = (dims,)
 
         rank = len(dims)
-        if rank==1:
+        if rank == 1:
             fftlen = ffi.cast("MKL_LONG", dims[0])
-            rc = lib.DftiCreateDescriptor(self.handle, self.precision, self.domain, 1, fftlen)
+            rc = lib.DftiCreateDescriptor(
+                self.handle, self.precision, self.domain, 1, fftlen)
         else:
             lengths = ffi.new("MKL_LONG[]", dims)
-            rc = lib.DftiCreateDescriptor(self.handle, self.precision, self.domain, rank, lengths)
+            rc = lib.DftiCreateDescriptor(
+                self.handle, self.precision, self.domain, rank, lengths)
         raise_if_error(rc)
 
     def commit(self):
@@ -179,7 +190,7 @@ class DftiDescriptor:
         raise_if_error(rc)
 
     def compute(self, dirn, src, dst=None):
-        if dirn==FORWARD:
+        if dirn == FORWARD:
             self.computeForward(src, dst)
         else:
             self.computeBackward(src, dst)
@@ -193,27 +204,32 @@ class DftiDescriptor:
         rc = lib.DftiFreeDescriptor(self.handle)
         raise_if_error(rc)
 
+
 FORWARD, BACKWARD = -1, +1
+
 
 def r2c_dst_dtype(src_dtype):
     return np.dtype(src_dtype.char.upper())
 
+
 def c2r_dst_dtype(src_dtype):
     return np.dtype(src_dtype.char.lower())
+
 
 def canonical_axes(ndim, axes):
     if axes is None:
         return list(range(ndim))
-    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
+    axes = [(x+ndim) % ndim for x in axes]  # fix negative axes
     axes = list(set(axes))          # remove duplicates
     axes.sort()
     return axes
+
 
 def canonical_axes_fftlens(ary, axes, fftlens):
     ndim = ary.ndim
     if axes is None:
         axes = list(range(ndim))
-    axes = [(x+ndim)%ndim for x in axes]  # fix negative axes
+    axes = [(x+ndim) % ndim for x in axes]  # fix negative axes
     if len(set(axes)) != len(axes):
         raise ValueError("duplicate axes")
 
@@ -228,22 +244,24 @@ def canonical_axes_fftlens(ary, axes, fftlens):
 
     # construct full shape tuple
     newshape = list(ary.shape)
-    for ax,sh in zip(axes, fftlens):
+    for ax, sh in zip(axes, fftlens):
         newshape[ax] = sh
 
     return axes, newshape
+
 
 def cce_to_full_1d(ary, realaxis):
     slices_src = [slice(None)]*ary.ndim
     slices_dst = [slice(None)]*ary.ndim
 
     end = (ary.shape[realaxis]+1)//2
-    slices_src[realaxis] = slice(1,end)
-    slices_dst[realaxis] = slice(-1,-end,-1)
+    slices_src[realaxis] = slice(1, end)
+    slices_dst[realaxis] = slice(-1, -end, -1)
 
     view_src = ary[tuple(slices_src)]
     view_dst = ary[tuple(slices_dst)]
     np.conjugate(view_src, view_dst)
+
 
 def builder(iarray, oarray, axes):
     if np.iscomplexobj(iarray) and np.iscomplexobj(oarray):
@@ -262,7 +280,7 @@ def builder(iarray, oarray, axes):
     loopaxes = [x for x in range(iarray.ndim) if x not in axes]
     if len(loopaxes) > 1:
         raise ValueError("unsupported axes")
-    in_place = iarray.ctypes.data==oarray.ctypes.data
+    in_place = iarray.ctypes.data == oarray.ctypes.data
 
     lengths = list(fftshape)
     istrides = [x//iarray.itemsize for x in iarray.strides]
@@ -292,12 +310,14 @@ def builder(iarray, oarray, axes):
 
     desc.setInPlace(in_place)
 
-    if domain==lib.DFTI_REAL:
+    if domain == lib.DFTI_REAL:
         # use CCE storage format
-        desc.setValueInt(lib.DFTI_CONJUGATE_EVEN_STORAGE, lib.DFTI_COMPLEX_COMPLEX)
+        desc.setValueInt(lib.DFTI_CONJUGATE_EVEN_STORAGE,
+                         lib.DFTI_COMPLEX_COMPLEX)
 
     desc.commit()
     return desc
+
 
 def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
     axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
@@ -308,13 +328,13 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
     cshape = list(fftshape)
 
     if np.isrealobj(iarray):
-        assert dirn==FORWARD
+        assert dirn == FORWARD
         cshape[realaxis] = rshape[realaxis]//2 + 1
 
         ishape, oshape, odtype = rshape, cshape, r2c_dst_dtype(iarray.dtype)
 
     else:
-        assert dirn==BACKWARD
+        assert dirn == BACKWARD
 
         if fftlens is None:
             # user didn't specify fftlens
@@ -342,6 +362,7 @@ def rfftnd_helper(array_in, dirn, axes=None, fftlens=None):
 
     return oarray
 
+
 def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
     axes, fftshape = canonical_axes_fftlens(array_in, axes, fftlens)
 
@@ -355,8 +376,8 @@ def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
     # if array_in is real-valued, we copy the input to the complex output
     # then do an in-place fft on the complex output array
     if np.isrealobj(array_in):
-        assert dirn==FORWARD
-        if len(axes)==1:
+        assert dirn == FORWARD
+        if len(axes) == 1:
             iarray = array_in
             oarray = np.empty(iarray.shape, r2c_dst_dtype(iarray.dtype))
             desc = builder(iarray, oarray, axes)
@@ -375,43 +396,54 @@ def fftnd_helper(array_in, dirn, axes=None, fftlens=None):
 
     return oarray
 
+
 def rfft(a, n=None, axis=-1):
     s = None if n is None else (n,)
     return rfftnd_helper(a, FORWARD, (axis,), s)
+
 
 def irfft(a, n=None, axis=-1):
     s = None if n is None else (n,)
     return rfftnd_helper(a, BACKWARD, (axis,), s)
 
-def rfft2(a, s=None, axes=(-2,-1)):
+
+def rfft2(a, s=None, axes=(-2, -1)):
     return rfftnd_helper(a, FORWARD, axes, s)
 
-def irfft2(a, s=None, axes=(-2,-1)):
+
+def irfft2(a, s=None, axes=(-2, -1)):
     return rfftnd_helper(a, BACKWARD, axes, s)
+
 
 def rfftn(a, s=None, axes=None):
     return rfftnd_helper(a, FORWARD, axes, s)
 
+
 def irfftn(a, s=None, axes=None):
     return rfftnd_helper(a, BACKWARD, axes, s)
+
 
 def fft(a, n=None, axis=-1):
     s = None if n is None else (n,)
     return fftnd_helper(a, FORWARD, (axis,), s)
 
+
 def ifft(a, n=None, axis=-1):
     s = None if n is None else (n,)
     return fftnd_helper(a, BACKWARD, (axis,), s)
 
-def fft2(a, s=None, axes=(-2,-1)):
+
+def fft2(a, s=None, axes=(-2, -1)):
     return fftnd_helper(a, FORWARD, axes, s)
 
-def ifft2(a, s=None, axes=(-2,-1)):
+
+def ifft2(a, s=None, axes=(-2, -1)):
     return fftnd_helper(a, BACKWARD, axes, s)
+
 
 def fftn(a, s=None, axes=None):
     return fftnd_helper(a, FORWARD, axes, s)
 
+
 def ifftn(a, s=None, axes=None):
     return fftnd_helper(a, BACKWARD, axes, s)
-

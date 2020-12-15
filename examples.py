@@ -4,10 +4,11 @@ import matplotlib.pyplot as plt
 
 import mkl_dfti
 
+
 def test_r2c_inplace():
     ttt = np.linspace(0, 1, 1000, endpoint=False)
-    mat = np.zeros((10,ttt.size+2), dtype=np.float32)
-    rmat = mat[:,:ttt.size]
+    mat = np.zeros((10, ttt.size+2), dtype=np.float32)
+    rmat = mat[:, :ttt.size]
     cmat = mat.view(np.complex64)
 
     for idx, row in enumerate(rmat):
@@ -22,6 +23,7 @@ def test_r2c_inplace():
         plt.plot(np.abs(row))
     plt.show()
 
+
 def test_rfft2():
     img_in = scipy.misc.ascent().astype(np.float32)
     spc = mkl_dfti.rfft2(img_in)
@@ -31,6 +33,7 @@ def test_rfft2():
     plt.figure()
     plt.imshow(img_out, cmap='gray')
     plt.show()
+
 
 def test_rfft2_many():
     img_orig = scipy.misc.ascent().astype(np.float32)
@@ -44,7 +47,7 @@ def test_rfft2_many():
     # stack the 2d-image
     # then shift the loopaxis to some other position
 
-    img_in = np.tile(img_orig, (howmany,1,1))
+    img_in = np.tile(img_orig, (howmany, 1, 1))
     img_in = np.rollaxis(img_in, 0, loopaxis+1)
     img_in = img_in.copy()
 
@@ -60,9 +63,10 @@ def test_rfft2_many():
     plt.imshow(disp_img, cmap='gray')
     plt.show()
 
+
 def test_shapes():
     ttt = np.linspace(0, 1, 1000, endpoint=False)
-    rmat = np.zeros((10,ttt.size), dtype=np.float32)
+    rmat = np.zeros((10, ttt.size), dtype=np.float32)
 
     for idx, row in enumerate(rmat):
         freq = (idx+1)*10
@@ -75,9 +79,9 @@ def test_shapes():
         plt.plot(np.abs(row))
     plt.show()
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     test_shapes()
     test_r2c_inplace()
     test_rfft2()
     test_rfft2_many()
-
